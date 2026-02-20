@@ -11,7 +11,7 @@ const Splash = ({ navigation }) => {
       }}
     >
       <View>
-        <Text style={styles.Title}>Quran Abi</Text>
+        <Text style={styles.Title}>قرآن النور</Text>
         <Text style={styles.subTitle}>
           Read the Quran, It will show you how the simple life can be
         </Text>

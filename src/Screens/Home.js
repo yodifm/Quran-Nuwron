@@ -4,18 +4,20 @@ import axios from "axios";
 import * as Location from "expo-location";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    BackHandler,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  BackHandler,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  Pressable,
+  View,
 } from "react-native";
 import Bedug from "../assets/Illustration/Bedug.svg";
-const BASE_URL = "https://equran.id/api/v2/shalat";
+const BASE_URL = "https://api.myquran.com/v1/sholat";
 const PRIMARY_COLOR = "#0000FF";
 
 const formatTime = (date) => {
@@ -51,10 +53,53 @@ const Home = ({ navigation }) => {
   const [todaySchedule, setTodaySchedule] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [province, setProvince] = useState("Jawa Timur");
-  const [kabkota, setKabkota] = useState("Kota Malang");
-  const [locationLabel, setLocationLabel] = useState("Malang, East Java");
+  const [province, setProvince] = useState("");
+  const [kabkota, setKabkota] = useState("");
+  const [locationLabel, setLocationLabel] = useState("");
   const [locationLoading, setLocationLoading] = useState(false);
+  const [checked, setChecked] = useState({
+    subuh: false,
+    dzuhur: false,
+    ashar: false,
+    maghrib: false,
+    isya: false,
+  });
+  const quotes = [
+    "Sesungguhnya salat mencegah dari perbuatan keji dan mungkar. (QS. Al-‘Ankabut: 45)",
+    "Sesungguhnya salat itu fardhu bagi orang beriman pada waktunya. (QS. An-Nisa: 103)",
+    "Mintalah pertolongan dengan sabar dan salat. (QS. Al-Baqarah: 45)",
+    "Perjanjian antara kami dengan orang kafir adalah salat; siapa meninggalkan salat maka ia kafir. (HR. Ahmad, Abu Daud)",
+  ];
+  const reverseCityFromCoordsWeb = async (coords) => {
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const addr = data?.address || {};
+      const city =
+        addr.city ||
+        addr.town ||
+        addr.village ||
+        addr.suburb ||
+        addr.municipality ||
+        "";
+      const state = addr.state || addr.region || addr.province || "";
+      return { city, state };
+    } catch {
+      return null;
+    }
+  };
+  const toggleCheck = (key) => {
+    setChecked((prev) => {
+      const nextVal = !prev[key];
+      const next = { ...prev, [key]: nextVal };
+      if (nextVal) {
+        const q = quotes[Math.floor(Math.random() * quotes.length)];
+        Alert.alert("Kutipan Religi", q);
+      }
+      return next;
+    });
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -76,45 +121,110 @@ const Home = ({ navigation }) => {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const loadLocation = async () => {
-      try {
-        setLocationLoading(true);
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          return;
+  const refreshLocation = async () => {
+    try {
+      setLocationLoading(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        if (Platform.OS === "web") {
+          setKabkota((prev) => prev || "Bekasi");
+          setProvince((prev) => prev || "Jawa Barat");
+          setLocationLabel((prev) => prev || "Bekasi, Jawa Barat");
         }
-        const position = await Location.getCurrentPositionAsync({});
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({});
+      if (Platform.OS === "web") {
+        const rev = await reverseCityFromCoordsWeb(position.coords);
+        if (rev && (rev.city || rev.state)) {
+          const cityLabel = rev.city || "Bekasi";
+          const stateLabel = rev.state || "Jawa Barat";
+          setLocationLabel(`${cityLabel}, ${stateLabel}`);
+          setKabkota(cityLabel);
+          setProvince(stateLabel);
+        } else {
+          setKabkota("Bekasi");
+          setProvince("Jawa Barat");
+          setLocationLabel("Bekasi, Jawa Barat");
+        }
+      } else {
         const places = await Location.reverseGeocodeAsync(position.coords);
         const place = places[0];
         if (place) {
           const rawCity = place.city || "";
           const rawSubregion = place.subregion || "";
           const regionName = place.region || rawSubregion || "";
-
-          const labelCityPart = rawCity || rawSubregion;
-          if (labelCityPart || regionName) {
+          const cityCandidate = rawCity || rawSubregion;
+          if (cityCandidate || regionName) {
             const label =
-              labelCityPart && regionName
-                ? `${labelCityPart}, ${regionName}`
-                : labelCityPart || regionName;
+              cityCandidate && regionName
+                ? `${cityCandidate}, ${regionName}`
+                : cityCandidate || regionName;
             setLocationLabel(label);
           }
-
           if (regionName) {
             setProvince(regionName);
           }
-
-          const kabSource = rawSubregion || rawCity;
-          if (kabSource) {
-            const lower = kabSource.toLowerCase();
-            let apiKabkota = kabSource;
-            if (lower.startsWith("kabupaten")) {
-              apiKabkota = kabSource.replace(/^Kabupaten\s+/i, "Kab. ");
-            } else if (!lower.startsWith("kab.") && !lower.startsWith("kota")) {
-              apiKabkota = `Kota ${kabSource}`;
+          if (cityCandidate) {
+            setKabkota(cityCandidate);
+          }
+        }
+      }
+    } catch {
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+ 
+  useEffect(() => {
+    const loadLocation = async () => {
+      try {
+        setLocationLoading(true);
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          if (Platform.OS === "web") {
+            setKabkota((prev) => prev || "Bekasi");
+            setProvince((prev) => prev || "Jawa Barat");
+            setLocationLabel((prev) => prev || "Bekasi, Jawa Barat");
+          }
+          return;
+        }
+        const position = await Location.getCurrentPositionAsync({});
+        if (Platform.OS === "web") {
+          const rev = await reverseCityFromCoordsWeb(position.coords);
+          if (rev && (rev.city || rev.state)) {
+            const cityLabel = rev.city || "Bekasi";
+            const stateLabel = rev.state || "Jawa Barat";
+            setLocationLabel(`${cityLabel}, ${stateLabel}`);
+            setKabkota(cityLabel);
+            setProvince(stateLabel);
+          } else {
+            setKabkota((prev) => prev || "Bekasi");
+            setProvince((prev) => prev || "Jawa Barat");
+            setLocationLabel((prev) => prev || "Bekasi, Jawa Barat");
+          }
+        } else {
+          const places = await Location.reverseGeocodeAsync(position.coords);
+          const place = places[0];
+          if (place) {
+            const rawCity = place.city || "";
+            const rawSubregion = place.subregion || "";
+            const regionName = place.region || rawSubregion || "";
+            const labelCityPart = rawCity || rawSubregion;
+            if (labelCityPart || regionName) {
+              const label =
+                labelCityPart && regionName
+                  ? `${labelCityPart}, ${regionName}`
+                  : labelCityPart || regionName;
+              setLocationLabel(label);
             }
-            setKabkota(apiKabkota);
+            if (regionName) {
+              setProvince(regionName);
+            }
+            const kabSource = rawSubregion || rawCity;
+            if (kabSource) {
+              setKabkota(kabSource);
+            }
           }
         }
       } catch {
@@ -122,7 +232,6 @@ const Home = ({ navigation }) => {
         setLocationLoading(false);
       }
     };
-
     loadLocation();
   }, []);
 
@@ -131,23 +240,43 @@ const Home = ({ navigation }) => {
       try {
         setLoading(true);
         setError("");
+        if (!kabkota) {
+          setLoading(false);
+          return;
+        }
         const today = new Date();
-        const month = today.getMonth() + 1;
         const year = today.getFullYear();
-        const response = await axios.post(BASE_URL, {
-          provinsi: province,
-          kabkota: kabkota,
-          bulan: month,
-          tahun: year,
-        });
-
-        const data = response.data?.data;
-        const todayStr = today.toISOString().slice(0, 10);
-        const todayItem = data?.jadwal?.find(
-          (item) => item.tanggal_lengkap === todayStr,
-        );
-        if (todayItem) {
-          setTodaySchedule(todayItem);
+        const month = String(today.getMonth() + 1).padStart(2, "0");
+        const day = String(today.getDate()).padStart(2, "0");
+        const all = await axios.get(`${BASE_URL}/kota/semua`);
+        const list = all.data?.data || [];
+        const normalizedKab = String(kabkota)
+          .toLowerCase()
+          .replace(/^kota\s+/i, "")
+          .replace(/^kab(?:\.|upaten)\s+/i, "")
+          .replace(/\s+city$/i, "");
+        const match =
+          list.find((x) =>
+            String(x.lokasi || x.nama || "")
+              .toLowerCase()
+              .includes(normalizedKab),
+          ) ||
+          list.find((x) =>
+            String(x.lokasi || x.nama || "")
+              .toLowerCase()
+              .includes(String(province).toLowerCase()),
+          );
+        const cityId = match?.id || match?.kode || null;
+        if (!cityId) {
+          setError("Kota untuk jadwal sholat tidak ditemukan");
+          return;
+        }
+        const url = `${BASE_URL}/jadwal/${cityId}/${year}/${month}/${day}`;
+        const res = await axios.get(url);
+        const d = res.data?.data;
+        const jadwal = d?.jadwal || null;
+        if (jadwal && typeof jadwal === "object") {
+          setTodaySchedule(jadwal);
         } else {
           setError("Jadwal hari ini tidak ditemukan");
         }
@@ -157,7 +286,6 @@ const Home = ({ navigation }) => {
         setLoading(false);
       }
     };
-
     fetchSchedule();
   }, [province, kabkota]);
 
@@ -203,6 +331,64 @@ const Home = ({ navigation }) => {
     return null;
   }, [now, todaySchedule]);
 
+  const [lastTriggered, setLastTriggered] = useState(null);
+  useEffect(() => {
+    if (!todaySchedule) return;
+    const mapping = {
+      subuh: todaySchedule.subuh || todaySchedule.Subuh,
+      dzuhur: todaySchedule.dzuhur || todaySchedule.Dzuhur,
+      ashar: todaySchedule.ashar || todaySchedule.Ashar,
+      maghrib: todaySchedule.maghrib || todaySchedule.Maghrib,
+      isya: todaySchedule.isya || todaySchedule.Isya,
+    };
+    for (const [key, timeStr] of Object.entries(mapping)) {
+      const t = parseTimeToday(timeStr);
+      if (!t) continue;
+      const diff = now.getTime() - t.getTime();
+      if (diff >= 0 && diff < 60000 && lastTriggered !== key) {
+        const title =
+          key === "dzuhur"
+            ? "Waktu Sholat Dzuhur"
+            : key === "subuh"
+            ? "Waktu Sholat Subuh"
+            : key === "ashar"
+            ? "Waktu Sholat Ashar"
+            : key === "maghrib"
+            ? "Waktu Sholat Maghrib"
+            : "Waktu Sholat Isya'";
+        const q =
+          "“Perjanjian antara kami dengan orang kafir adalah sholat. Barangsiapa yang meninggalkan sholat maka ia telah kafir.”\nHR. Ahmad, Abu Daud";
+        Alert.alert(title, `Telah tiba pada pukul ${timeStr}\n\n${q}`, [
+          { text: "Tutup" },
+        ]);
+        setLastTriggered(key);
+        break;
+      }
+    }
+  }, [now, todaySchedule, lastTriggered]);
+
+  const [doas, setDoas] = useState([]);
+  const [doaLoading, setDoaLoading] = useState(false);
+  useEffect(() => {
+    const fetchDoa = async () => {
+      try {
+        setDoaLoading(true);
+        const res = await axios.get("https://equran.id/api/doa");
+        const data = Array.isArray(res.data)
+          ? res.data
+          : Array.isArray(res.data?.data)
+            ? res.data.data
+            : [];
+        setDoas(data);
+      } catch {
+        setDoas([]);
+      } finally {
+        setDoaLoading(false);
+      }
+    };
+    fetchDoa();
+  }, []);
+
   return (
     <SafeAreaView style={styles.wrapper}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -213,7 +399,9 @@ const Home = ({ navigation }) => {
               {locationLoading ? "Detecting location..." : locationLabel}
             </Text>
           </View>
-          <Ionicons name="notifications-outline" size={22} color="#6B7280" />
+          <TouchableOpacity onPress={refreshLocation}>
+            <Ionicons name="locate-outline" size={22} color="#6B7280" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.card}>
@@ -277,27 +465,25 @@ const Home = ({ navigation }) => {
           </View>
           <View style={styles.trackerRow}>
             {[
-              { label: "Subuh", done: true },
-              { label: "Dzuhur", done: true },
-              { label: "Ashar", done: true },
-              { label: "Maghrib", done: false },
-              { label: "Isya'", done: false },
+              { label: "Subuh", key: "subuh" },
+              { label: "Dzuhur", key: "dzuhur" },
+              { label: "Ashar", key: "ashar" },
+              { label: "Maghrib", key: "maghrib" },
+              { label: "Isya'", key: "isya" },
             ].map((item) => (
-              <View key={item.label} style={styles.trackerItem}>
-                <View
-                  style={[
-                    styles.trackerCircle,
-                    item.done
-                      ? styles.trackerCircleDone
-                      : styles.trackerCirclePending,
-                  ]}
-                >
-                  {item.done && (
-                    <Ionicons name="checkmark" size={12} color="#FFFFFF" />
-                  )}
-                </View>
+              <Pressable
+                key={item.key}
+                style={styles.trackerItem}
+                onPress={() => toggleCheck(item.key)}
+                hitSlop={10}
+              >
+                <Ionicons
+                  name={checked[item.key] ? "checkbox" : "checkbox-outline"}
+                  size={20}
+                  color={PRIMARY_COLOR}
+                />
                 <Text style={styles.trackerLabel}>{item.label}</Text>
-              </View>
+              </Pressable>
             ))}
           </View>
           <TouchableOpacity style={styles.trackerButton}>
@@ -307,23 +493,40 @@ const Home = ({ navigation }) => {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Daily Prayer</Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate("Doa")}>
             <Text style={styles.sectionAction}>See All</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.grid}>
-          {[
-            "Prayer for eating",
-            "Study prayer",
-            "Bedtime prayers",
-            "Morning prayers",
-          ].map((label) => (
-            <TouchableOpacity key={label} style={styles.gridItem}>
-              <Ionicons name="book-outline" size={24} color={PRIMARY_COLOR} />
-              <Text style={styles.gridLabel}>{label}</Text>
-            </TouchableOpacity>
-          ))}
+          {(doaLoading ? Array.from({ length: 4 }) : doas.slice(0, 4)).map(
+            (item, idx) => {
+              const label =
+                item?.judul ||
+                item?.title ||
+                item?.nama ||
+                `Doa ${idx + 1}`;
+              const id = item?.id;
+              return (
+                <TouchableOpacity
+                  key={label}
+                  style={styles.gridItem}
+                  onPress={() => {
+                    if (id) {
+                      navigation.navigate("DoaDetail", { id });
+                    }
+                  }}
+                >
+                  <Ionicons
+                    name="book-outline"
+                    size={24}
+                    color={PRIMARY_COLOR}
+                  />
+                  <Text style={styles.gridLabel}>{label}</Text>
+                </TouchableOpacity>
+              );
+            },
+          )}
         </View>
       </ScrollView>
 
@@ -331,8 +534,9 @@ const Home = ({ navigation }) => {
         {[
           { label: "Home", icon: "home", route: "Home" },
           { label: "Shalat", icon: "time", route: "Shalat" },
-          { label: "Qiblat", icon: "compass", route: "Qiblat" },
           { label: "Quran", icon: "book", route: "Quran" },
+          { label: "Qiblat", icon: "compass", route: "Qiblat" },
+          { label: "Game", icon: "game-controller", route: "Game" },
         ].map((item) => {
           const isActive = item.label === "Home";
           return (
@@ -345,11 +549,13 @@ const Home = ({ navigation }) => {
                 }
               }}
             >
-              <Ionicons
-                name={isActive ? `${item.icon}` : `${item.icon}-outline`}
-                size={22}
-                color={isActive ? PRIMARY_COLOR : "#9CA3AF"}
-              />
+              <View style={[styles.tabCircle, isActive && styles.tabCircleActive]}>
+                <Ionicons
+                  name={isActive ? `${item.icon}` : `${item.icon}-outline`}
+                  size={22}
+                  color={isActive ? "#FFFFFF" : "#9CA3AF"}
+                />
+              </View>
               <Text
                 style={[
                   styles.bottomLabel,
@@ -571,6 +777,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 4,
+  },
+  tabCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabCircleActive: {
+    backgroundColor: PRIMARY_COLOR,
   },
   bottomLabel: {
     fontSize: 11,

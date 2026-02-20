@@ -95,7 +95,7 @@ const Quran = ({ navigation }) => {
       <View style={styles.container}>
         <View style={styles.heroCard}>
           <View style={styles.textWrapper}>
-            <Text style={styles.title}>Quran Abi</Text>
+            <Text style={styles.title}>قرآن النور</Text>
             <Text style={styles.subTitle}>
               Read the Quran, It will show you how the simple life can be
             </Text>
@@ -132,8 +132,9 @@ const Quran = ({ navigation }) => {
         {[
           { label: "Home", icon: "home", route: "Home" },
           { label: "Shalat", icon: "time", route: "Shalat" },
-          { label: "Qiblat", icon: "compass", route: "Qiblat" },
           { label: "Quran", icon: "book", route: "Quran" },
+          { label: "Qiblat", icon: "compass", route: "Qiblat" },
+          { label: "Game", icon: "game-controller", route: "Game" },
         ].map((item) => {
           const isActive = item.label === "Quran";
           return (
@@ -146,11 +147,13 @@ const Quran = ({ navigation }) => {
                 }
               }}
             >
-              <Ionicons
-                name={isActive ? `${item.icon}` : `${item.icon}-outline`}
-                size={22}
-                color={isActive ? PRIMARY_COLOR : "#9CA3AF"}
-              />
+              <View style={[styles.tabCircle, isActive && styles.tabCircleActive]}>
+                <Ionicons
+                  name={isActive ? `${item.icon}` : `${item.icon}-outline`}
+                  size={22}
+                  color={isActive ? "#FFFFFF" : "#9CA3AF"}
+                />
+              </View>
               <Text
                 style={[
                   styles.bottomLabel,
@@ -296,6 +299,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 4,
+  },
+  tabCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabCircleActive: {
+    backgroundColor: PRIMARY_COLOR,
   },
   bottomLabel: {
     fontSize: 11,

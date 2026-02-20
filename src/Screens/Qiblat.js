@@ -5,16 +5,20 @@ import * as Location from "expo-location";
 import { useCallback, useEffect, useState } from "react";
 import {
     BackHandler,
+    Platform,
     SafeAreaView,
     ScrollView,
+    StatusBar,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from "react-native";
+import Kabah from "../assets/Illustration/Kabah.svg";
 
-const PRIMARY_COLOR = "#0000FF";
+const PRIMARY_COLOR = "#3B82F6";
 const QIBLA_BASE_URL = "https://time.siswadi.com/qibla";
+const MYQURAN_QIBLA_BASE = "https://api.myquran.com/v3/qibla";
 
 const Qiblat = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
@@ -68,14 +72,42 @@ const Qiblat = ({ navigation }) => {
           addressCandidate = labelCityPart || regionName || "";
         }
 
+        // Tampilkan arah kiblat lokal segera agar tidak terasa lambat
+        try {
+          const toRad = (v) => (v * Math.PI) / 180;
+          const toDeg = (v) => (v * 180) / Math.PI;
+          const kaabaLat = toRad(21.4225);
+          const kaabaLng = toRad(39.8262);
+          const lat1 = toRad(latitude);
+          const lng1 = toRad(longitude);
+          const dLng = kaabaLng - lng1;
+          const y = Math.sin(dLng) * Math.cos(kaabaLat);
+          const x =
+            Math.cos(lat1) * Math.sin(kaabaLat) -
+            Math.sin(lat1) * Math.cos(kaabaLat) * Math.cos(dLng);
+          const brng = Math.atan2(y, x);
+          const bearingDeg = (toDeg(brng) + 360) % 360;
+          setDirection(bearingDeg);
+          setLoading(false);
+        } catch {}
+
         const extractDeg = (data) => {
           if (!data || typeof data !== "object") return null;
           const d =
-            (data.data && (data.data.direction ?? data.data.deg ?? data.data.bearing)) ??
+            (data.data &&
+              (data.data.direction ?? data.data.deg ?? data.data.bearing)) ??
             data.direction ??
             data.deg ??
             data.bearing ??
-            (data.qibla && (data.qibla.direction ?? data.qibla.deg ?? data.qibla.bearing));
+            (data.qibla &&
+              (data.qibla.direction ?? data.qibla.deg ?? data.qibla.bearing)) ??
+            (data.data &&
+              (data.data.derajat ??
+                data.data.degree ??
+                data.data.qibla_degree)) ??
+            data.derajat ??
+            data.degree ??
+            data.qibla_degree;
           return typeof d === "number" && !Number.isNaN(d) ? d : null;
         };
 
@@ -89,20 +121,26 @@ const Qiblat = ({ navigation }) => {
         };
 
         let deg = null;
-        // 1) /lat/lng
-        deg = await tryFetch(`${QIBLA_BASE_URL}/${latitude}/${longitude}`);
-        // 2) ?lat=&lng=
+        deg =
+          (await tryFetch(
+            `${MYQURAN_QIBLA_BASE}?lat=${latitude}&lon=${longitude}`,
+          )) ??
+          (await tryFetch(
+            `${MYQURAN_QIBLA_BASE}?latitude=${latitude}&longitude=${longitude}`,
+          )) ??
+          (await tryFetch(`${MYQURAN_QIBLA_BASE}/${latitude}/${longitude}`));
+        if (deg == null) {
+          deg = await tryFetch(`${QIBLA_BASE_URL}/${latitude}/${longitude}`);
+        }
         if (deg == null) {
           deg = await tryFetch(
             `${QIBLA_BASE_URL}/?lat=${latitude}&lng=${longitude}`,
           );
         }
-        // 3) ?address=City
         if (deg == null && addressCandidate) {
           const enc = encodeURIComponent(addressCandidate);
           deg = await tryFetch(`${QIBLA_BASE_URL}/?address=${enc}`);
         }
-        // 4) Fallback umum (Jakarta) agar tetap tampil
         if (deg == null) {
           deg = await tryFetch(`${QIBLA_BASE_URL}/Jakarta`);
         }
@@ -157,8 +195,7 @@ const Qiblat = ({ navigation }) => {
             setHeading(value);
           }
         });
-      } catch {
-      }
+      } catch {}
     };
     startHeadingWatch();
     return () => {
@@ -174,6 +211,13 @@ const Qiblat = ({ navigation }) => {
     direction != null && heading != null
       ? (direction - heading + 360) % 360
       : 0;
+  const rotationGuide = (() => {
+    if (direction == null || heading == null) return null;
+    const delta = (direction - heading + 360) % 360;
+    const amount = delta <= 180 ? delta : 360 - delta;
+    const side = delta <= 180 ? "kanan" : "kiri";
+    return `Putar ponsel ${Math.round(amount)}° ke ${side}`;
+  })();
 
   return (
     <SafeAreaView style={styles.wrapper}>
@@ -187,27 +231,28 @@ const Qiblat = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.compassCard}>
           <View style={styles.compassDial}>
-            <Ionicons
-              name="compass"
-              size={72}
-              color={PRIMARY_COLOR}
-              style={styles.compassIcon}
-            />
-            <View
-              style={[
-                styles.kaabaPointerContainer,
-                { transform: [{ rotate: `${pointerRotation}deg` }] },
-              ]}
-            >
-              <View style={styles.kaabaPointerLine} />
-              <Ionicons
-                name="cube"
-                size={18}
-                color={PRIMARY_COLOR}
-                style={styles.kaabaIcon}
-              />
+            <View style={styles.ring} />
+            <Text style={[styles.cardinalLabel, styles.cardinalN]}>N</Text>
+            <Text style={[styles.cardinalLabel, styles.cardinalE]}>E</Text>
+            <Text style={[styles.cardinalLabel, styles.cardinalS]}>S</Text>
+            <Text style={[styles.cardinalLabel, styles.cardinalW]}>W</Text>
+            <View style={[styles.dot, styles.dotTop]} />
+            <View style={[styles.dot, styles.dotRight]} />
+            <View style={[styles.dot, styles.dotBottom]} />
+            <View style={[styles.dot, styles.dotLeft]} />
+            <View style={styles.centerOverlay}>
+              <View
+                style={[
+                  styles.kaabaPointerContainer,
+                  { transform: [{ rotate: `${pointerRotation}deg` }] },
+                ]}
+              >
+                <View style={styles.kaabaIcon}>
+                  <Kabah width={26} height={26} />
+                </View>
+              </View>
             </View>
-            <Text style={styles.northLabel}>N</Text>
+            <View style={styles.pivot} />
           </View>
           <Text style={styles.directionValue}>
             {direction != null ? `${Math.round(direction)}°` : "–"}
@@ -217,6 +262,9 @@ const Qiblat = ({ navigation }) => {
             <Text style={styles.coordText}>
               {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
             </Text>
+          )}
+          {!!rotationGuide && (
+            <Text style={styles.guideText}>{rotationGuide}</Text>
           )}
         </View>
 
@@ -235,14 +283,23 @@ const Qiblat = ({ navigation }) => {
         {!loading && !!error && (
           <Text style={styles.statusTextError}>{error}</Text>
         )}
+
+        <TouchableOpacity
+          style={styles.nearestBtn}
+          onPress={() => navigation.navigate("NearestMosque")}
+        >
+          <Ionicons name="location" size={18} color="#FFFFFF" />
+          <Text style={styles.nearestBtnText}>Find nearest mosque</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       <View style={styles.bottomBar}>
         {[
           { label: "Home", icon: "home", route: "Home" },
           { label: "Shalat", icon: "time", route: "Shalat" },
-          { label: "Qiblat", icon: "compass", route: "Qiblat" },
           { label: "Quran", icon: "book", route: "Quran" },
+          { label: "Qiblat", icon: "compass", route: "Qiblat" },
+          { label: "Game", icon: "game-controller", route: "Game" },
         ].map((item) => {
           const isActive = item.label === "Qiblat";
           return (
@@ -255,11 +312,13 @@ const Qiblat = ({ navigation }) => {
                 }
               }}
             >
-              <Ionicons
-                name={isActive ? `${item.icon}` : `${item.icon}-outline`}
-                size={22}
-                color={isActive ? PRIMARY_COLOR : "#9CA3AF"}
-              />
+              <View style={[styles.tabCircle, isActive && styles.tabCircleActive]}>
+                <Ionicons
+                  name={isActive ? `${item.icon}` : `${item.icon}-outline`}
+                  size={22}
+                  color={isActive ? "#FFFFFF" : "#9CA3AF"}
+                />
+              </View>
               <Text
                 style={[
                   styles.bottomLabel,
@@ -282,6 +341,7 @@ const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
     backgroundColor: "#F4F4F5",
+    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight || 0 : 12,
   },
   header: {
     paddingHorizontal: 20,
@@ -302,7 +362,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 24,
-    paddingBottom: 90,
+    paddingBottom: 120,
   },
   compassCard: {
     backgroundColor: "#FFFFFF",
@@ -317,31 +377,65 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 12,
   },
+  ring: {
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    borderWidth: 10,
+    borderColor: "#DBEAFE",
+  },
+  pivot: {
+    position: "absolute",
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: PRIMARY_COLOR,
+  },
+  cardinalLabel: {
+    position: "absolute",
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1E3A8A",
+  },
+  cardinalN: { top: -6 },
+  cardinalE: { right: -10 },
+  cardinalS: { bottom: -6 },
+  cardinalW: { left: -10 },
+  dot: {
+    position: "absolute",
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#CBD5E1",
+  },
+  dotTop: { top: 20 },
+  dotRight: { right: 20 },
+  dotBottom: { bottom: 20 },
+  dotLeft: { left: 20 },
   compassIcon: {
     marginBottom: 0,
   },
-  kaabaPointerContainer: {
+  centerOverlay: {
     position: "absolute",
-    width: 80,
-    height: 80,
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  kaabaPointerContainer: {
+    height: 110,
     alignItems: "center",
     justifyContent: "flex-start",
   },
-  kaabaPointerLine: {
-    width: 2,
-    height: 26,
-    backgroundColor: PRIMARY_COLOR,
-    borderRadius: 999,
-  },
   kaabaIcon: {
-    marginTop: 4,
-  },
-  northLabel: {
-    position: "absolute",
-    top: 4,
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#6B7280",
+    marginTop: -2,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 3,
   },
   directionValue: {
     fontSize: 32,
@@ -357,6 +451,12 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 12,
     color: "#9CA3AF",
+  },
+  guideText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#1E3A8A",
+    fontWeight: "600",
   },
   infoCard: {
     backgroundColor: "#FFFFFF",
@@ -387,6 +487,22 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 4,
   },
+  nearestBtn: {
+    marginTop: 16,
+    alignSelf: "stretch",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: PRIMARY_COLOR,
+    borderRadius: 999,
+    paddingVertical: 10,
+  },
+  nearestBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
   bottomBar: {
     position: "absolute",
     left: 16,
@@ -406,6 +522,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 4,
+  },
+  tabCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabCircleActive: {
+    backgroundColor: PRIMARY_COLOR,
   },
   bottomLabel: {
     fontSize: 11,
