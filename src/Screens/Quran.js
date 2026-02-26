@@ -1,12 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import axios from "axios";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   BackHandler,
   FlatList,
   Image,
+  TextInput,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -19,6 +20,7 @@ const QURAN_BASE_URL = "https://equran.id/api/v2/surat";
 
 const Quran = ({ navigation }) => {
   const [surahs, setSurahs] = useState([]);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -57,6 +59,23 @@ const Quran = ({ navigation }) => {
 
     fetchSurahs();
   }, []);
+
+  const filteredSurahs = useMemo(() => {
+    const q = String(search || "").trim().toLowerCase();
+    if (!q) return surahs;
+    return surahs.filter((s) => {
+      const latin = String(s.namaLatin || "").toLowerCase();
+      const arab = String(s.nama || "").toLowerCase();
+      const arti = String(s.arti || "").toLowerCase();
+      const nomor = String(s.nomor || "");
+      return (
+        latin.includes(q) ||
+        arab.includes(q) ||
+        arti.includes(q) ||
+        nomor === q
+      );
+    });
+  }, [surahs, search]);
 
   const renderSurahItem = ({ item }) => {
     return (
@@ -106,6 +125,23 @@ const Quran = ({ navigation }) => {
           />
         </View>
 
+        <View style={styles.searchBox}>
+          <Ionicons name="search" size={18} color="#6B7280" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Cari surat…"
+            placeholderTextColor="#9CA3AF"
+            value={search}
+            onChangeText={setSearch}
+            returnKeyType="search"
+          />
+          {search ? (
+            <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+              <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
         {loading && (
           <View style={styles.statusWrapper}>
             <ActivityIndicator color={PRIMARY_COLOR} size="small" />
@@ -119,7 +155,7 @@ const Quran = ({ navigation }) => {
 
         {!loading && !error && (
           <FlatList
-            data={surahs}
+            data={filteredSurahs}
             keyExtractor={(item) => String(item.nomor)}
             renderItem={renderSurahItem}
             contentContainerStyle={styles.listContent}
@@ -227,6 +263,23 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 13,
     color: "#DC2626",
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginBottom: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#111827",
   },
   listContent: {
     paddingTop: 8,

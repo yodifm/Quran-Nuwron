@@ -4,6 +4,7 @@ import Doa from "../Screens/Doa";
 import DoaDetail from "../Screens/DoaDetail";
 import Game from "../Screens/Game";
 import GameTebakAyat from "../Screens/GameTebakAyat";
+import GameSambungAyat from "../Screens/GameSambungAyat";
 import NearestMosque from "../Screens/NearestMosque";
 import Home from "../Screens/Home";
 import Qiblat from "../Screens/Qiblat";
@@ -71,6 +72,11 @@ const Routes = () => {
       <Stack.Screen
         name="GameTebakAyat"
         component={GameTebakAyat}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="GameSambungAyat"
+        component={GameSambungAyat}
         options={{ headerShown: false }}
       />
       <Stack.Screen

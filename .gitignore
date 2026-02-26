@@ -41,3 +41,6 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Local HOME folder used by local dev servers (should not be tracked)
+.home/

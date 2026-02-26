@@ -29,6 +29,7 @@ const formatTime = (date) => {
 const Shalat = ({ navigation }) => {
   const [now, setNow] = useState(new Date());
   const [todaySchedule, setTodaySchedule] = useState(null);
+  const [tomorrowSchedule, setTomorrowSchedule] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [province, setProvince] = useState("");
@@ -283,6 +284,18 @@ const Shalat = ({ navigation }) => {
         } else {
           setError("Jadwal hari ini tidak ditemukan");
         }
+        const tmw = new Date(today);
+        tmw.setDate(today.getDate() + 1);
+        const y2 = tmw.getFullYear();
+        const m2 = String(tmw.getMonth() + 1).padStart(2, "0");
+        const d2 = String(tmw.getDate()).padStart(2, "0");
+        try {
+          const url2 = `${BASE_URL}/jadwal/${cityId}/${y2}/${m2}/${d2}`;
+          const res2 = await axios.get(url2);
+          const dres2 = res2.data?.data;
+          const jadwal2 = dres2?.jadwal || null;
+          setTomorrowSchedule(jadwal2 || null);
+        } catch {}
       } catch {
         setError("Gagal memuat jadwal shalat");
       } finally {
@@ -354,6 +367,14 @@ const Shalat = ({ navigation }) => {
     d.setHours(hh, mm, 0, 0);
     return d;
   };
+  const parseTimeForDate = (s, baseDate) => {
+    if (!s || typeof s !== "string") return null;
+    const [hh, mm] = s.split(":").map((x) => parseInt(x, 10));
+    if (Number.isNaN(hh) || Number.isNaN(mm)) return null;
+    const d = new Date(baseDate);
+    d.setHours(hh, mm, 0, 0);
+    return d;
+  };
   const diffLabel = (from, to) => {
     const diffMs = Math.max(0, to.getTime() - from.getTime());
     const min = Math.floor(diffMs / 60000);
@@ -381,8 +402,20 @@ const Shalat = ({ navigation }) => {
         };
       }
     }
+    if (tomorrowSchedule?.subuh) {
+      const base = new Date(now);
+      base.setDate(base.getDate() + 1);
+      const t = parseTimeForDate(tomorrowSchedule.subuh, base);
+      if (t) {
+        return {
+          label: "Subuh",
+          time: tomorrowSchedule.subuh,
+          diff: diffLabel(now, t),
+        };
+      }
+    }
     return null;
-  }, [now, todaySchedule]);
+  }, [now, todaySchedule, tomorrowSchedule]);
 
   const ensurePermission = useCallback(async () => {
     if (isExpoGo) return false;

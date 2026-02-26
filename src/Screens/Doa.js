@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
+    TextInput,
     SafeAreaView,
     StyleSheet,
     Text,
@@ -17,6 +18,7 @@ const PRIMARY_COLOR = "#0000FF";
 
 const Doa = ({ navigation }) => {
   const [doas, setDoas] = useState([]);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -63,6 +65,20 @@ const Doa = ({ navigation }) => {
     );
   };
 
+  const filteredDoas = useMemo(() => {
+    const q = String(search || "").trim().toLowerCase();
+    if (!q) return doas;
+    return doas.filter((item, idx) => {
+      const title =
+        item?.judul || item?.title || item?.nama || `Doa ${idx + 1}`;
+      const subtitle = item?.artinya || item?.terjemahan || item?.arti || "";
+      return (
+        String(title).toLowerCase().includes(q) ||
+        String(subtitle).toLowerCase().includes(q)
+      );
+    });
+  }, [doas, search]);
+
   return (
     <SafeAreaView style={styles.wrapper}>
       <View style={styles.header}>
@@ -82,6 +98,22 @@ const Doa = ({ navigation }) => {
         </View>
         <Ionicons name="book" size={28} color="#065F46" />
       </View>
+      <View style={styles.searchBox}>
+        <Ionicons name="search" size={18} color="#6B7280" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Cari doa…"
+          placeholderTextColor="#9CA3AF"
+          value={search}
+          onChangeText={setSearch}
+          returnKeyType="search"
+        />
+        {search ? (
+          <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+        ) : null}
+      </View>
       {loading && (
         <View style={styles.statusRow}>
           <ActivityIndicator color={PRIMARY_COLOR} size="small" />
@@ -93,7 +125,7 @@ const Doa = ({ navigation }) => {
       )}
       {!loading && !error && (
         <FlatList
-          data={doas}
+          data={filteredDoas}
           keyExtractor={(item, idx) => String(item?.id || idx)}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
@@ -147,6 +179,24 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 13,
     color: "#DC2626",
+  },
+  searchBox: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#111827",
   },
   list: {
     paddingHorizontal: 20,

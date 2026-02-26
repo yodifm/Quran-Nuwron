@@ -58,6 +58,7 @@ const diffLabel = (from, to) => {
 const Home = ({ navigation }) => {
   const [now, setNow] = useState(new Date());
   const [todaySchedule, setTodaySchedule] = useState(null);
+  const [tomorrowSchedule, setTomorrowSchedule] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [province, setProvince] = useState("");
@@ -369,6 +370,18 @@ const Home = ({ navigation }) => {
         } else {
           setError("Jadwal hari ini tidak ditemukan");
         }
+        const tmw = new Date(today);
+        tmw.setDate(today.getDate() + 1);
+        const y2 = tmw.getFullYear();
+        const m2 = String(tmw.getMonth() + 1).padStart(2, "0");
+        const d2 = String(tmw.getDate()).padStart(2, "0");
+        try {
+          const url2 = `${BASE_URL}/jadwal/${cityId}/${y2}/${m2}/${d2}`;
+          const res2 = await axios.get(url2);
+          const dres2 = res2.data?.data;
+          const jadwal2 = dres2?.jadwal || null;
+          setTomorrowSchedule(jadwal2 || null);
+        } catch {}
       } catch {
         setError("Gagal memuat jadwal shalat");
       } finally {
@@ -397,6 +410,15 @@ const Home = ({ navigation }) => {
     ];
   }, [todaySchedule]);
 
+  const parseTimeForDate = (timeStr, baseDate) => {
+    if (!timeStr) return null;
+    const [h, m] = timeStr.split(":").map((v) => parseInt(v, 10));
+    if (Number.isNaN(h) || Number.isNaN(m)) return null;
+    const d = new Date(baseDate);
+    d.setHours(h, m, 0, 0);
+    return d;
+  };
+
   const nextPrayerInfo = useMemo(() => {
     if (!todaySchedule) return null;
     const order = [
@@ -417,8 +439,20 @@ const Home = ({ navigation }) => {
         };
       }
     }
+    if (tomorrowSchedule?.subuh) {
+      const base = new Date(now);
+      base.setDate(base.getDate() + 1);
+      const t = parseTimeForDate(tomorrowSchedule.subuh, base);
+      if (t) {
+        return {
+          label: "Subuh",
+          time: tomorrowSchedule.subuh,
+          diff: diffLabel(now, t),
+        };
+      }
+    }
     return null;
-  }, [now, todaySchedule]);
+  }, [now, todaySchedule, tomorrowSchedule]);
 
   const [lastTriggered, setLastTriggered] = useState(null);
   useEffect(() => {

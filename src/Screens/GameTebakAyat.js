@@ -178,11 +178,9 @@ const GameTebakAyat = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.wrapper}>
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backBtn}
-        >
-          <Ionicons name="chevron-back" size={20} color="#111827" />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={18} color="#1F2937" />
+          <Text style={styles.backText}>Kembali</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Tebak Ayat</Text>
         <View style={{ width: 20 }} />
@@ -354,9 +352,20 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   backBtn: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: "#F3F4F6",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "#EEF2FF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  backText: {
+    fontSize: 13,
+    color: "#1F2937",
+    fontWeight: "600",
   },
   headerTitle: {
     fontSize: 16,

@@ -54,12 +54,15 @@ const Game = ({ navigation }) => {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.gameCard} disabled>
+          <TouchableOpacity
+            style={styles.gameCard}
+            onPress={() => navigation.navigate("GameSambungAyat")}
+          >
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
             >
-              <Ionicons name="link" size={22} color="#9CA3AF" />
-              <Text style={styles.cardTitle}>Sambung Ayat (segera)</Text>
+              <Ionicons name="link" size={22} color={PRIMARY_COLOR} />
+              <Text style={styles.cardTitle}>Sambung Ayat</Text>
             </View>
             <Text style={styles.cardText}>
               Pilih ayat selanjutnya yang benar dari pilihan yang ada.
