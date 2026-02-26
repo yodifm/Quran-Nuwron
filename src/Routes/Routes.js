@@ -11,6 +11,7 @@ import Quran from "../Screens/Quran";
 import Shalat from "../Screens/Shalat";
 import Splash from "../Screens/Splash";
 import Tatacara from "../Screens/Tatacara";
+import DzikirCounter from "../Screens/DzikirCounter";
 
 const Stack = createNativeStackNavigator();
 
@@ -75,6 +76,11 @@ const Routes = () => {
       <Stack.Screen
         name="NearestMosque"
         component={NearestMosque}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="DzikirCounter"
+        component={DzikirCounter}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

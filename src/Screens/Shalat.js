@@ -1,19 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import axios from "axios";
+import Constants from "expo-constants";
 import * as Location from "expo-location";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  BackHandler,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View,
+    BackHandler,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 const BASE_URL = "https://api.myquran.com/v1/sholat";
@@ -30,10 +31,17 @@ const Shalat = ({ navigation }) => {
   const [todaySchedule, setTodaySchedule] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [province, setProvince] = useState("Jawa Timur");
-  const [kabkota, setKabkota] = useState("Kota Malang");
-  const [locationLabel, setLocationLabel] = useState("Malang, East Java");
+  const [province, setProvince] = useState("");
+  const [kabkota, setKabkota] = useState("");
+  const [locationLabel, setLocationLabel] = useState("");
+  const [locationLoading, setLocationLoading] = useState(true);
   const [reminderSwitch, setReminderSwitch] = useState({});
+  const [scheduledIds, setScheduledIds] = useState({});
+  const isExpoGo = Constants?.executionEnvironment === "storeClient";
+  const getNotificationsModule = useCallback(async () => {
+    const mod = await import("expo-notifications");
+    return mod;
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -56,17 +64,30 @@ const Shalat = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
+    if (isExpoGo) return;
+    (async () => {
+      const Notifications = await getNotificationsModule();
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+        }),
+      });
+    })();
+  }, [isExpoGo, getNotificationsModule]);
+
+  useEffect(() => {
     const loadLocation = async () => {
       try {
+        setLocationLoading(true);
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") {
-          setKabkota((prev) => prev || "Bekasi");
-          setProvince((prev) => prev || "Jawa Barat");
-          setLocationLabel((prev) => prev || "Bekasi, Jawa Barat");
+          // Biarkan kosong agar UI menampilkan status "Detecting location..."
           return;
         }
-        const position = await Location.getCurrentPositionAsync({});
         if (Platform.OS === "web") {
+          const position = await Location.getCurrentPositionAsync({});
           const reverseCityFromCoordsWeb = async (coords) => {
             try {
               const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}`;
@@ -99,13 +120,13 @@ const Shalat = ({ navigation }) => {
             setLocationLabel("Bekasi, Jawa Barat");
           }
         } else {
-          const places = await Location.reverseGeocodeAsync(position.coords);
-          const place = places[0];
-          if (place) {
+          const setFromCoords = async (coords) => {
+            const places = await Location.reverseGeocodeAsync(coords);
+            const place = places[0];
+            if (!place) return;
             const rawCity = place.city || "";
             const rawSubregion = place.subregion || "";
             const regionName = place.region || rawSubregion || "";
-
             const labelCityPart = rawCity || rawSubregion;
             if (labelCityPart || regionName) {
               const label =
@@ -114,18 +135,95 @@ const Shalat = ({ navigation }) => {
                   : labelCityPart || regionName;
               setLocationLabel(label);
             }
-
             if (regionName) {
               setProvince(regionName);
             }
-
-            const kabSource = rawSubregion || rawCity;
+            const lowerRegion = String(regionName).toLowerCase();
+            const kecamatan = String(rawSubregion || rawCity).toLowerCase();
+            const mapJakarta = () => {
+              const west = [
+                "cengkareng",
+                "grogol petamburan",
+                "kalideres",
+                "kebon jeruk",
+                "kembangan",
+                "palmerah",
+                "taman sari",
+                "tambora",
+              ];
+              const south = [
+                "cilandak",
+                "jagakarsa",
+                "kebayoran baru",
+                "kebayoran lama",
+                "mampang prapatan",
+                "pancoran",
+                "pasar minggu",
+                "pesanggrahan",
+                "setiabudi",
+                "tebet",
+              ];
+              const east = [
+                "cakung",
+                "ciracas",
+                "duren sawit",
+                "jatinegara",
+                "kramat jati",
+                "makasar",
+                "matraman",
+                "pasar rebo",
+                "pulo gadung",
+              ];
+              const north = [
+                "cilincing",
+                "kelapa gading",
+                "koja",
+                "pademangan",
+                "penjaringan",
+                "tanjung priok",
+              ];
+              const center = [
+                "cempaka putih",
+                "gambir",
+                "johar baru",
+                "kemayoran",
+                "menteng",
+                "sawah besar",
+                "senen",
+                "tanah abang",
+              ];
+              if (west.some((x) => kecamatan.includes(x))) return "Jakarta Barat";
+              if (south.some((x) => kecamatan.includes(x))) return "Jakarta Selatan";
+              if (east.some((x) => kecamatan.includes(x))) return "Jakarta Timur";
+              if (north.some((x) => kecamatan.includes(x))) return "Jakarta Utara";
+              if (center.some((x) => kecamatan.includes(x))) return "Jakarta Pusat";
+              return "";
+            };
+            let kabSource = rawSubregion || rawCity;
+            if (lowerRegion.includes("jakarta")) {
+              const mapped = mapJakarta();
+              if (mapped) kabSource = mapped;
+            }
             if (kabSource) {
               setKabkota(kabSource);
             }
+          };
+          const last = await Location.getLastKnownPositionAsync();
+          if (last?.coords) {
+            await setFromCoords(last.coords);
           }
+          try {
+            const fresh = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+              maximumAge: 30000,
+              timeout: 6000,
+            });
+            await setFromCoords(fresh.coords);
+          } catch {}
         }
-      } catch {}
+      } catch {} finally {
+        setLocationLoading(false);
+      }
     };
 
     loadLocation();
@@ -162,7 +260,16 @@ const Shalat = ({ navigation }) => {
               .toLowerCase()
               .includes(String(province).toLowerCase()),
           );
-        const cityId = match?.id || match?.kode || null;
+        const isJakarta =
+          /jakarta/i.test(String(province)) ||
+          /jakarta/i.test(String(kabkota));
+        const jakartaItem = list.find((x) =>
+          /kota\s+jakarta/i.test(String(x.lokasi || x.nama || "")),
+        );
+        const cityId =
+          match?.id ||
+          match?.kode ||
+          (isJakarta ? jakartaItem?.id || "1301" : null);
         if (!cityId) {
           setError("Kota untuk jadwal sholat tidak ditemukan");
           return;
@@ -277,10 +384,88 @@ const Shalat = ({ navigation }) => {
     return null;
   }, [now, todaySchedule]);
 
+  const ensurePermission = useCallback(async () => {
+    if (isExpoGo) return false;
+    const Notifications = await getNotificationsModule();
+    const settings = await Notifications.getPermissionsAsync();
+    if (settings.status !== "granted") {
+      const req = await Notifications.requestPermissionsAsync();
+      return req.status === "granted";
+    }
+    return true;
+  }, [isExpoGo, getNotificationsModule]);
+
+  const scheduleFor = useCallback(
+    async (key, label, time) => {
+      if (isExpoGo) {
+        const when = parseTimeToday(time);
+        if (!when) return null;
+        if (when.getTime() <= new Date().getTime()) return null;
+        return null;
+      }
+      const ok = await ensurePermission();
+      if (!ok) return null;
+      const Notifications = await getNotificationsModule();
+      const when = parseTimeToday(time);
+      if (!when) return null;
+      if (when.getTime() <= new Date().getTime()) return null;
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `${label}`,
+          body: `Waktu ${label} ${time}`,
+          sound: "default",
+          priority: (Notifications.AndroidNotificationPriority || "high"),
+        },
+        trigger: when,
+      });
+      return id;
+    },
+    [ensurePermission, isExpoGo, getNotificationsModule],
+  );
+
+  const cancelFor = useCallback(async (id) => {
+    if (!id) return;
+    const Notifications = await getNotificationsModule();
+    await Notifications.cancelScheduledNotificationAsync(id);
+  }, [getNotificationsModule]);
+
+  useEffect(() => {
+    if (!todaySchedule) return;
+    const keys = Object.keys(reminderSwitch).filter((k) => reminderSwitch[k]);
+    const mapTime = {
+      imsak: todaySchedule?.imsak,
+      subuh: todaySchedule?.subuh,
+      dhuha: todaySchedule?.dhuha,
+      dzuhur: todaySchedule?.dzuhur,
+      ashar: todaySchedule?.ashar,
+      maghrib: todaySchedule?.maghrib,
+      isya: todaySchedule?.isya,
+    };
+    const labels = {
+      imsak: "Imsak",
+      subuh: "Subuh",
+      dhuha: "Dhuha",
+      dzuhur: "Dzuhur",
+      ashar: "Ashar",
+      maghrib: "Maghrib",
+      isya: "Isya'",
+    };
+    keys.forEach(async (k) => {
+      const existing = scheduledIds[k];
+      if (existing) await cancelFor(existing);
+      const id = await scheduleFor(k, labels[k], mapTime[k]);
+      if (id) setScheduledIds((prev) => ({ ...prev, [k]: id }));
+    });
+  }, [todaySchedule, reminderSwitch, scheduledIds, scheduleFor, cancelFor]);
+
   return (
     <SafeAreaView style={styles.wrapper}>
       <View style={styles.header}>
-        <Text style={styles.headerLocation}>{locationLabel}</Text>
+        <Text style={styles.headerLocation}>
+          {locationLoading
+            ? "Detecting location..."
+            : locationLabel || "Lokasi belum diketahui"}
+        </Text>
         <Text style={styles.headerTime}>{formatTime(now)}</Text>
         <Text style={styles.headerSub}>
           {loading ? "Memuat jadwal…" : error || "Tetap konsisten dalam shalat"}
@@ -340,9 +525,27 @@ const Shalat = ({ navigation }) => {
               <View style={styles.reminderSwitchBox}>
                 <Switch
                   value={!!reminderSwitch[item.key]}
-                  onValueChange={(v) =>
-                    setReminderSwitch((prev) => ({ ...prev, [item.key]: v }))
-                  }
+                  onValueChange={async (v) => {
+                    setReminderSwitch((prev) => ({ ...prev, [item.key]: v }));
+                    const time = item.time;
+                    const label = item.label;
+                    if (v) {
+                      const existing = scheduledIds[item.key];
+                      if (existing) await cancelFor(existing);
+                      const id = await scheduleFor(item.key, label, time);
+                      if (id) setScheduledIds((prev) => ({ ...prev, [item.key]: id }));
+                    } else {
+                      const existing = scheduledIds[item.key];
+                      if (existing) {
+                        await cancelFor(existing);
+                        setScheduledIds((prev) => {
+                          const p = { ...prev };
+                          delete p[item.key];
+                          return p;
+                        });
+                      }
+                    }
+                  }}
                   thumbColor={
                     reminderSwitch[item.key] ? PRIMARY_COLOR : "#FFFFFF"
                   }

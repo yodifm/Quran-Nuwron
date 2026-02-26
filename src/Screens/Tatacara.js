@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
+import Animated, { Layout, FadeInDown, FadeOutUp } from "react-native-reanimated";
 import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
@@ -28,7 +29,29 @@ const Tatacara = ({ navigation }) => {
         setLoading(true);
         setError("");
         const res = await axios.get(API_URL);
-        const data = Array.isArray(res.data) ? res.data : [];
+        let data = Array.isArray(res.data) ? res.data : [];
+        const hasIktidal = data.some((it) =>
+          String(it?.name || "").toLowerCase().includes("iktidal") ||
+          /i[’']?tidal/i.test(String(it?.name || "")),
+        );
+        if (!hasIktidal) {
+          const iktidalItem = {
+            name: "Iktidal",
+            arabic: "سَمِعَ اللَّهُ لِمَنْ حَمِدَهُ\nرَبَّنَا لَكَ الْحَمْدُ",
+            latin: "Sami'allāhu liman ḥamidah\nRabbana laka al-ḥamdu",
+            terjemahan:
+              "Allah mendengar siapa yang memuji-Nya.\nWahai Rabb kami, bagi-Mu segala puji.",
+          };
+          const idx =
+            data.findIndex((it) =>
+              /rukuk|ruku'?/i.test(String(it?.name || "")),
+            ) ?? -1;
+          if (idx >= 0) {
+            data.splice(idx + 1, 0, iktidalItem);
+          } else {
+            data.push(iktidalItem);
+          }
+        }
         setItems(data);
       } catch {
         setError("Gagal memuat tatacara sholat");
@@ -102,7 +125,12 @@ const Tatacara = ({ navigation }) => {
                   />
                 </TouchableOpacity>
                 {isOpen && (
-                  <View style={styles.cardBody}>
+                  <Animated.View
+                    layout={Layout.springify().duration(250)}
+                    entering={FadeInDown.duration(200)}
+                    exiting={FadeOutUp.duration(200)}
+                    style={styles.cardBody}
+                  >
                     {!!it.arabic && (
                       <View>
                         {it.arabic
@@ -171,7 +199,7 @@ const Tatacara = ({ navigation }) => {
                         ))}
                       </View>
                     )}
-                  </View>
+                  </Animated.View>
                 )}
               </View>
             );

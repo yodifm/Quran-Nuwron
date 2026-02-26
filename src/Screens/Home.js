@@ -4,19 +4,20 @@ import axios from "axios";
 import * as Location from "expo-location";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  BackHandler,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  Pressable,
-  View,
+    Alert,
+    BackHandler,
+    Modal,
+    Platform,
+    Pressable,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
-import Bedug from "../assets/Illustration/Bedug.svg";
 const BASE_URL = "https://api.myquran.com/v1/sholat";
 const PRIMARY_COLOR = "#0000FF";
 
@@ -33,6 +34,12 @@ const parseTimeToday = (timeStr) => {
   const d = new Date();
   d.setHours(h, m, 0, 0);
   return d;
+};
+
+const dayOfYear = (date) => {
+  const start = new Date(date.getFullYear(), 0, 0);
+  const diff = date.getTime() - start.getTime();
+  return Math.floor(diff / 86400000);
 };
 
 const diffLabel = (from, to) => {
@@ -64,12 +71,19 @@ const Home = ({ navigation }) => {
     maghrib: false,
     isya: false,
   });
-  const quotes = [
-    "Sesungguhnya salat mencegah dari perbuatan keji dan mungkar. (QS. Al-‘Ankabut: 45)",
-    "Sesungguhnya salat itu fardhu bagi orang beriman pada waktunya. (QS. An-Nisa: 103)",
-    "Mintalah pertolongan dengan sabar dan salat. (QS. Al-Baqarah: 45)",
-    "Perjanjian antara kami dengan orang kafir adalah salat; siapa meninggalkan salat maka ia kafir. (HR. Ahmad, Abu Daud)",
-  ];
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [manualKab, setManualKab] = useState("");
+  const [manualProv, setManualProv] = useState("");
+  const quotes = useMemo(
+    () => [
+      "Sesungguhnya salat mencegah dari perbuatan keji dan mungkar. (QS. Al-‘Ankabut: 45)",
+      "Sesungguhnya salat itu fardhu bagi orang beriman pada waktunya. (QS. An-Nisa: 103)",
+      "Mintalah pertolongan dengan sabar dan salat. (QS. Al-Baqarah: 45)",
+      "Perjanjian antara kami dengan orang kafir adalah salat; siapa meninggalkan salat maka ia kafir. (HR. Ahmad, Abu Daud)",
+    ],
+    [],
+  );
+  const dailyQuote = useMemo(() => quotes[dayOfYear(now) % quotes.length], [now, quotes]);
   const reverseCityFromCoordsWeb = async (coords) => {
     try {
       const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}`;
@@ -165,8 +179,74 @@ const Home = ({ navigation }) => {
           if (regionName) {
             setProvince(regionName);
           }
-          if (cityCandidate) {
-            setKabkota(cityCandidate);
+          const lowerRegion = String(regionName).toLowerCase();
+          const kecamatan = String(cityCandidate).toLowerCase();
+          const mapJakarta = () => {
+            const west = [
+              "cengkareng",
+              "grogol petamburan",
+              "kalideres",
+              "kebon jeruk",
+              "kembangan",
+              "palmerah",
+              "taman sari",
+              "tambora",
+            ];
+            const south = [
+              "cilandak",
+              "jagakarsa",
+              "kebayoran baru",
+              "kebayoran lama",
+              "mampang prapatan",
+              "pancoran",
+              "pasar minggu",
+              "pesanggrahan",
+              "setiabudi",
+              "tebet",
+            ];
+            const east = [
+              "cakung",
+              "ciracas",
+              "duren sawit",
+              "jatinegara",
+              "kramat jati",
+              "makasar",
+              "matraman",
+              "pasar rebo",
+              "pulo gadung",
+            ];
+            const north = [
+              "cilincing",
+              "kelapa gading",
+              "koja",
+              "pademangan",
+              "penjaringan",
+              "tanjung priok",
+            ];
+            const center = [
+              "cempaka putih",
+              "gambir",
+              "johar baru",
+              "kemayoran",
+              "menteng",
+              "sawah besar",
+              "senen",
+              "tanah abang",
+            ];
+            if (west.some((x) => kecamatan.includes(x))) return "Jakarta Barat";
+            if (south.some((x) => kecamatan.includes(x))) return "Jakarta Selatan";
+            if (east.some((x) => kecamatan.includes(x))) return "Jakarta Timur";
+            if (north.some((x) => kecamatan.includes(x))) return "Jakarta Utara";
+            if (center.some((x) => kecamatan.includes(x))) return "Jakarta Pusat";
+            return "";
+          };
+          let kabSource = cityCandidate;
+          if (lowerRegion.includes("jakarta")) {
+            const mapped = mapJakarta();
+            if (mapped) kabSource = mapped;
+          }
+          if (kabSource) {
+            setKabkota(kabSource);
           }
         }
       }
@@ -266,7 +346,16 @@ const Home = ({ navigation }) => {
               .toLowerCase()
               .includes(String(province).toLowerCase()),
           );
-        const cityId = match?.id || match?.kode || null;
+        const isJakarta =
+          /jakarta/i.test(String(province)) ||
+          /jakarta/i.test(String(kabkota));
+        const jakartaItem = list.find((x) =>
+          /kota\s+jakarta/i.test(String(x.lokasi || x.nama || "")),
+        );
+        const cityId =
+          match?.id ||
+          match?.kode ||
+          (isJakarta ? jakartaItem?.id || "1301" : null);
         if (!cityId) {
           setError("Kota untuk jadwal sholat tidak ditemukan");
           return;
@@ -399,33 +488,71 @@ const Home = ({ navigation }) => {
               {locationLoading ? "Detecting location..." : locationLabel}
             </Text>
           </View>
-          <TouchableOpacity onPress={refreshLocation}>
+          <TouchableOpacity
+            onPress={() => {
+              setShowLocationModal(true);
+              setManualKab(kabkota);
+              setManualProv(province);
+            }}
+            onLongPress={refreshLocation}
+            hitSlop={10}
+          >
             <Ionicons name="locate-outline" size={22} color="#6B7280" />
           </TouchableOpacity>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>
-            Start your day with these prayers
-          </Text>
-          <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+        <View style={styles.heroCta}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroCtaTitle}>Ingat Allah</Text>
+            <Text style={styles.heroCtaSub}>Mulai dzikir harian</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.heroCtaButton}
+            onPress={() => navigation.navigate("DzikirCounter")}
+          >
+            <Text style={styles.heroCtaButtonText}>Mulai</Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.prayerTimeCard}>
-          <View>
-            <Text style={styles.hijriDate}>
-              {todaySchedule?.hari} {todaySchedule?.tanggal_lengkap ?? ""}
-            </Text>
-            <Text style={styles.mainTime}>{formatTime(now)}</Text>
-            <Text style={styles.subTime}>
+        <View style={styles.quickGrid}>
+          {[
+            { label: "Doa", icon: "book-outline", route: "Doa" },
+            { label: "Quran", icon: "library-outline", route: "Quran" },
+            { label: "Shalat", icon: "time-outline", route: "Shalat" },
+            { label: "Masjid", icon: "business-outline", route: "NearestMosque" },
+            { label: "Qiblat", icon: "compass-outline", route: "Qiblat" },
+            { label: "Game", icon: "game-controller-outline", route: "Game" },
+          ].map((item) => (
+            <TouchableOpacity
+              key={item.label}
+              style={styles.quickItem}
+              onPress={() => navigation.navigate(item.route)}
+            >
+              <View style={styles.quickIconBox}>
+                <Ionicons name={item.icon} size={20} color={PRIMARY_COLOR} />
+              </View>
+              <Text style={styles.quickLabel}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.prayerTimeCardModern}>
+          <View style={styles.quotePill}>
+            <Text style={styles.quoteText}>{dailyQuote}</Text>
+          </View>
+          <View style={styles.timeBlock}>
+            <Text style={styles.mainTimeModern}>{formatTime(now)}</Text>
+            <Text style={styles.subTimeModern}>
               {nextPrayerInfo
                 ? `${nextPrayerInfo.label} in ${nextPrayerInfo.diff}`
                 : loading
                   ? "Loading schedule..."
                   : error || "Jadwal selesai untuk hari ini"}
             </Text>
+            <Text style={styles.hijriDate}>
+              {todaySchedule?.hari} {todaySchedule?.tanggal_lengkap ?? ""}
+            </Text>
           </View>
-          <Bedug width={72} height={72} />
         </View>
 
         <View style={styles.prayerRow}>
@@ -530,6 +657,77 @@ const Home = ({ navigation }) => {
         </View>
       </ScrollView>
 
+      <Modal
+        visible={showLocationModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLocationModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderLeft}>
+                <Ionicons name="location-outline" size={18} color="#111827" />
+                <Text style={styles.cardTitle}>Pengaturan Lokasi</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowLocationModal(false)}>
+                <Ionicons name="close" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalHint}>
+              Isi manual bila deteksi otomatis kurang akurat. Tekan dan tahan
+              ikon lokasi di header untuk deteksi ulang cepat.
+            </Text>
+            <Text style={styles.inputLabel}>Kota/Kabupaten</Text>
+            <TextInput
+              value={manualKab}
+              onChangeText={setManualKab}
+              placeholder="Contoh: Jakarta Barat"
+              style={styles.input}
+            />
+            <Text style={styles.inputLabel}>Provinsi</Text>
+            <TextInput
+              value={manualProv}
+              onChangeText={setManualProv}
+              placeholder="Contoh: DKI Jakarta"
+              style={styles.input}
+            />
+            <View style={{ height: 12 }} />
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnSecondary]}
+                onPress={async () => {
+                  await refreshLocation();
+                  setShowLocationModal(false);
+                }}
+              >
+                <Ionicons name="locate-outline" size={18} color={PRIMARY_COLOR} />
+                <Text style={[styles.modalBtnText, { color: PRIMARY_COLOR }]}>
+                  Gunakan Lokasi Sekarang
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnPrimary]}
+                onPress={() => {
+                  if (manualKab) setKabkota(manualKab);
+                  if (manualProv) setProvince(manualProv);
+                  setLocationLabel(
+                    manualKab && manualProv
+                      ? `${manualKab}, ${manualProv}`
+                      : manualKab || manualProv || locationLabel,
+                  );
+                  setShowLocationModal(false);
+                }}
+              >
+                <Text style={[styles.modalBtnText, { color: "#FFFFFF" }]}>
+                  Simpan
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.bottomBar}>
         {[
           { label: "Home", icon: "home", route: "Home" },
@@ -609,6 +807,67 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 16,
   },
+  heroCta: {
+    backgroundColor: PRIMARY_COLOR,
+    borderRadius: 18,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
+  },
+  heroCtaTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  heroCtaSub: {
+    fontSize: 12,
+    color: "#E0E7FF",
+    opacity: 0.95,
+    marginTop: 2,
+  },
+  heroCtaButton: {
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+  },
+  heroCtaButtonText: {
+    color: PRIMARY_COLOR,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  quickGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginBottom: 8,
+  },
+  quickItem: {
+    width: "30.5%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    gap: 8,
+  },
+  quickIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "rgba(0, 0, 255, 0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickLabel: {
+    fontSize: 12,
+    color: "#111827",
+    fontWeight: "500",
+    textAlign: "center",
+    width: "100%",
+  },
   trackerCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
@@ -620,29 +879,69 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#111827",
   },
-  prayerTimeCard: {
-    backgroundColor: "#FFFFFF",
+  prayerTimeCardModern: {
+    backgroundColor: PRIMARY_COLOR,
     borderRadius: 20,
-    padding: 20,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
+    padding: 12,
+    flexDirection: "column",
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
+    marginBottom: 12,
   },
   hijriDate: {
     fontSize: 12,
-    color: "#9CA3AF",
+    color: "#BFDBFE",
+    marginTop: 6,
+    marginBottom: 0,
+    textAlign: "center",
+  },
+  mainTimeModern: {
+    fontSize: 44,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textAlign: "center",
+  },
+  subTimeModern: {
+    fontSize: 12,
+    color: "#DBEAFE",
+    marginTop: 2,
+    textAlign: "center",
+  },
+  timeBlock: {
+    marginTop: 0,
+    alignItems: "center",
+    width: "100%",
+  },
+  locationPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0, 0, 255, 0.18)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  locationPillText: {
+    fontSize: 12,
+    color: "#BFDBFE",
+    fontWeight: "500",
+  },
+  quotePill: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: PRIMARY_COLOR,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    alignSelf: "center",
+    maxWidth: "100%",
     marginBottom: 4,
   },
-  mainTime: {
-    fontSize: 36,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  subTime: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginTop: 4,
+  quoteText: {
+    fontSize: 13,
+    color: "#FFFFFF",
+    fontWeight: "500",
+    textAlign: "center",
   },
   prayerRow: {
     backgroundColor: "#FFFFFF",
@@ -738,6 +1037,65 @@ const styles = StyleSheet.create({
   sectionAction: {
     fontSize: 12,
     color: PRIMARY_COLOR,
+    fontWeight: "500",
+  },
+  modalOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalCard: {
+    width: "92%",
+    maxWidth: 420,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+  },
+  modalHint: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginBottom: 12,
+  },
+  inputLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginBottom: 6,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    fontSize: 13,
+    color: "#111827",
+    marginBottom: 12,
+  },
+  modalBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  modalBtnPrimary: {
+    backgroundColor: PRIMARY_COLOR,
+    borderColor: PRIMARY_COLOR,
+  },
+  modalBtnSecondary: {
+    backgroundColor: "rgba(0, 0, 255, 0.08)",
+    borderColor: "rgba(0, 0, 255, 0.18)",
+  },
+  modalBtnText: {
+    fontSize: 13,
     fontWeight: "500",
   },
   grid: {
